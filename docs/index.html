@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentStreak — Daily check-in for Agent ID holders</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; margin-top: 2rem; }
+  .card { border: 1px solid #ddd; border-radius: 12px; padding: 1rem 1.2rem; margin: 1rem 0; }
+  button { background: #f0b90b; border: none; border-radius: 8px; padding: 0.7rem 1.4rem; font-size: 1rem; cursor: pointer; }
+  button:disabled { background: #ddd; cursor: not-allowed; }
+  .muted { color: #666; font-size: 0.9rem; }
+  .big { font-size: 2rem; font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border-bottom: 1px solid #eee; padding: 0.4rem 0.2rem; text-align: left; }
+  code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 4px; word-break: break-all; }
+  #status { white-space: pre-wrap; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+<h1>AgentStreak</h1>
+<p>Daily check-in for holders of a Binance Agent ID. Hold an Agent ID, check in once per UTC day, build your streak.</p>
+
+<div class="card">
+  <h2>Your check-in</h2>
+  <p><button id="connectBtn">Connect wallet</button> <span id="account" class="muted"></span></p>
+  <p id="holderLine" class="muted">Connect an injected wallet (MetaMask, Binance Wallet extension) to see your Agent ID status.</p>
+  <p>Current streak: <span class="big" id="streak">–</span> &nbsp; Longest: <span id="longest">–</span> &nbsp; Total check-ins: <span id="total">–</span></p>
+  <p><button id="checkinBtn" disabled>Check in today</button> <span id="status" class="muted"></span></p>
+  <p class="muted">Check-ins are free except for BNB network gas (about 0.0002–0.0004 BNB per check-in). Points and streaks have no monetary value — there is no token, no yield and no promised return.</p>
+</div>
+
+<div class="card">
+  <h2>Leaderboard</h2>
+  <p class="muted">Top holders by total check-ins. Built from on-chain CheckIn events.</p>
+  <table><thead><tr><th>#</th><th>Address</th><th>Streak</th><th>Total</th></tr></thead><tbody id="board"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody></table>
+</div>
+
+<div class="card">
+  <h2>How it works</h2>
+  <ul>
+    <li>Only addresses holding an Agent ID (SPACE ID Agent ID, ERC-721 on BNB Chain) can check in. The contract checks <code>balanceOf(address) &gt; 0</code> on the Agent ID contract <code>0x60b9262456de011f7d15a54cdd8c48baaa8b022f</code>.</li>
+    <li>One check-in per UTC day. Checking in on consecutive days grows your streak; a missed day resets it to 1.</li>
+    <li>Contract: <code id="contractAddr">not deployed yet</code> (<a id="contractLink" href="#">BscScan</a>). Source verified and open-source on BscScan. The contract has <b>no owner and no admin powers</b>: no pause, no mint, no freeze, no tax, no withdraw, no upgrade.</li>
+    <li>Agentic Wallet users: open this page inside the Binance App browser. This site never asks for a seed phrase, private key, API secret or pairing code, and never uses QR-code login.</li>
+    <li>This project is not affiliated with or endorsed by Binance. It does not look up wallets by Agent ID name.</li>
+  </ul>
+</div>
+
+<script>
+// ---- CONFIG: fill CONTRACT_ADDRESS + DEPLOY_BLOCK after the mainnet deploy ----
+const CONFIG = {
+  CHAIN_ID: 56, // BNB Chain mainnet
+  RPC_URL: "https://bsc-dataseed.binance.org/",
+  AGENT_ID: "0x60b9262456de011f7d15a54cdd8c48baaa8b022f",
+  CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000000", // TODO: mainnet AgentStreak address
+  DEPLOY_BLOCK: 0, // TODO: block number of the mainnet deployment tx
+};
+const STREAK_ABI = [
+  "function checkIn() external",
+  "function streakOf(address) view returns (uint256)",
+  "function totalOf(address) view returns (uint256)",
+  "function longestStreak(address) view returns (uint256)",
+  "function hasCheckedInToday(address) view returns (bool)",
+  "function totalCheckins() view returns (uint256)",
+  "event CheckIn(address indexed user, uint256 indexed day, uint256 streak, uint256 total)",
+];
+const ID_ABI = ["function balanceOf(address) view returns (uint256)"];
+
+const $ = (id) => document.getElementById(id);
+const readProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
+let signer = null, userAddr = null, streak = null;
+
+async function refresh() {
+  if (!streak) return;
+  try {
+    if (userAddr) {
+      const [s, l, t, done] = await Promise.all([
+        streak.streakOf(userAddr), streak.longestStreak(userAddr),
+        streak.totalOf(userAddr), streak.hasCheckedInToday(userAddr),
+      ]);
+      $("streak").textContent = s.toString();
+      $("longest").textContent = l.toString();
+      $("total").textContent = t.toString();
+      const btn = $("checkinBtn");
+      btn.disabled = done || !signer;
+      btn.textContent = done ? "Already checked in today" : "Check in today";
+    }
+    const total = await streak.totalCheckins();
+    $("status").textContent = "Total check-ins on-chain: " + total.toString();
+  } catch (e) { $("status").textContent = "Read error: " + (e.shortMessage || e.message); }
+}
+
+async function loadBoard() {
+  const body = $("board");
+  if (!CONFIG.CONTRACT_ADDRESS || CONFIG.CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000" || !CONFIG.DEPLOY_BLOCK) {
+    body.innerHTML = '<tr><td colspan="4" class="muted">Leaderboard activates after the mainnet deployment.</td></tr>';
+    return;
+  }
+  try {
+    const latest = await readProvider.getBlockNumber();
+    const iface = new ethers.Interface(STREAK_ABI);
+    const topic = ethers.id("CheckIn(address,uint256,uint256,uint256)");
+    const per = {}; // addr -> {days:Set, total}
+    const CHUNK = 5000;
+    for (let from = CONFIG.DEPLOY_BLOCK; from <= latest; from += CHUNK) {
+      const to = Math.min(from + CHUNK - 1, latest);
+      const logs = await readProvider.getLogs({ address: CONFIG.CONTRACT_ADDRESS, topics: [topic], fromBlock: from, toBlock: to });
+      for (const log of logs) {
+        const parsed = iface.parseLog(log);
+        const u = parsed.args.user.toLowerCase();
+        per[u] = per[u] || { days: new Set(), total: 0 };
+        per[u].days.add(Number(parsed.args.day));
+        per[u].total = Number(parsed.args.total);
+      }
+    }
+    const todayDay = Math.floor(Date.now() / 1000 / 86400);
+    const rows = Object.entries(per).map(([addr, v]) => {
+      let cur = 0, d = todayDay;
+      if (!v.days.has(d)) d = todayDay - 1; // streak counts up to yesterday if not yet today
+      while (v.days.has(d)) { cur++; d--; }
+      return { addr, streak: cur, total: v.total };
+    }).sort((a, b) => b.total - a.total).slice(0, 20);
+    body.innerHTML = rows.length ? rows.map((r, i) =>
+      `<tr><td>${i + 1}</td><td><code>${r.addr.slice(0, 6)}…${r.addr.slice(-4)}</code></td><td>${r.streak}</td><td>${r.total}</td></tr>`
+    ).join("") : '<tr><td colspan="4" class="muted">No check-ins yet.</td></tr>';
+  } catch (e) { body.innerHTML = '<tr><td colspan="4" class="muted">Leaderboard failed to load.</td></tr>'; }
+}
+
+$("connectBtn").onclick = async () => {
+  try {
+    if (!window.ethereum) { $("account").textContent = "No injected wallet found. Install MetaMask or open in the Binance App browser."; return; }
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const net = await provider.getNetwork();
+    if (Number(net.chainId) !== CONFIG.CHAIN_ID) {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x38" }] });
+    }
+    signer = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    $("account").textContent = userAddr;
+    const id = new ethers.Contract(CONFIG.AGENT_ID, ID_ABI, readProvider);
+    const bal = await id.balanceOf(userAddr);
+    $("holderLine").textContent = bal > 0n
+      ? "Agent ID holder confirmed — you can check in."
+      : "This address holds no Agent ID, so it cannot check in. Claim an Agent ID in the Binance App first.";
+    await refresh();
+  } catch (e) { $("account").textContent = "Connect failed: " + (e.shortMessage || e.message); }
+};
+
+$("checkinBtn").onclick = async () => {
+  if (!signer || !streak) return;
+  try {
+    $("status").textContent = "Confirm the transaction in your wallet…";
+    const tx = await streak.connect(signer).checkIn();
+    $("status").textContent = "Submitted: " + tx.hash + " — waiting for confirmation…";
+    await tx.wait();
+    $("status").textContent = "Checked in! Tx: " + tx.hash;
+    await refresh(); await loadBoard();
+  } catch (e) { $("status").textContent = "Check-in failed: " + (e.shortMessage || e.message); }
+};
+
+(async () => {
+  $("contractAddr").textContent = CONFIG.CONTRACT_ADDRESS;
+  if (CONFIG.CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000") {
+    $("contractLink").href = "https://bscscan.com/address/" + CONFIG.CONTRACT_ADDRESS;
+    streak = new ethers.Contract(CONFIG.CONTRACT_ADDRESS, STREAK_ABI, readProvider);
+    await refresh(); await loadBoard();
+  } else {
+    $("contractLink").href = "https://bscscan.com/";
+    $("board").innerHTML = '<tr><td colspan="4" class="muted">Leaderboard activates after the mainnet deployment.</td></tr>';
+  }
+})();
+</script>
+</body>
+</html>
