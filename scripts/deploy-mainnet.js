@@ -21,8 +21,8 @@ async function main() {
 
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log("BNB balance:", ethers.formatEther(balance));
-  if (balance < ethers.parseEther("0.005")) {
-    console.log("BLOCKED: deployer needs at least ~0.005 BNB for deploy + verification buffer.");
+  if (balance < ethers.parseEther("0.002")) {
+    console.log("BLOCKED: deployer needs at least ~0.002 BNB (deploy ~0.0011 BNB at 3 gwei; BscScan verification is free/off-chain).");
     process.exit(2);
   }
 

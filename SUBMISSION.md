@@ -1,6 +1,6 @@
 # AgentStreak — Hackathon Submission Draft
 
-> DRAFT — contract addresses for mainnet to be filled after deployment.
+> Deployed on BNB Chain mainnet 2026-11-23 (block 135234832). Testnet not deployed.
 > Submission form (needs Binance login; the user submits it):
 > https://www.binance.com/en/survey/fb26d2bd25e04329b1ba77c7b3811d23
 
@@ -16,7 +16,7 @@
 
 | Network | AgentStreak address | BscScan |
 | --- | --- | --- |
-| BNB Chain mainnet (56) | _TBD — deploy pending_ | _TBD_ |
+| BNB Chain mainnet (56) | `0xd6132a1340332A16C0130E44743CFAEC04640f70` (deployed 2026-11-23, block 135234832) | https://bscscan.com/address/0xd6132a1340332A16C0130E44743CFAEC04640f70 |
 | BSC testnet (97) | _TBD — deployer needs tBNB_ | _TBD_ |
 
 - Agent ID gate (mainnet): `0x60b9262456de011f7d15a54cdd8c48baaa8b022f`
@@ -43,11 +43,11 @@ submitting; do not change without confirmation.
 
 ## Deployment cost (measured)
 
-- Deploy: 356,755 gas ≈ **0.0011 BNB at 3 gwei** (≈ 0.0018 BNB at 5 gwei)
+- Deploy: 356,755 gas, actual cost **0.00001764 BNB** (gas price ~0.05 gwei at deploy time; ≈ 0.0011 BNB at 3 gwei)
 - Check-in: ≈ 140,000 gas first time, ≈ 55,000 gas afterwards
   (≈ 0.0002–0.0004 BNB at 3 gwei)
 - Deployer wallet: `0x0a0145605CdB8ffd3D70267dB780D7721B78cF7c`
-  (needs ~0.003 BNB for deploy + buffer)
+  (funded 0.00299022 BNB on 2026-11-23; balance after deploy 0.0029725806 BNB)
 
 ## Safety red-line checklist
 
